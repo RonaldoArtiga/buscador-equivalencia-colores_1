@@ -1,0 +1,147 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador de Equivalencias de Colores</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f0f0f0; color: #333; }
+        .container { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; }
+        .panel { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 400px; }
+        .result { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .color-box { width: 50px; height: 50px; border: 1px solid #ccc; border-radius: 5px; }
+        input, select, button { padding: 8px; margin: 8px 0; width: 100%; border-radius: 5px; border: 1px solid #ccc; }
+        button { background: #0077cc; color: white; border: none; cursor: pointer; }
+        button:hover { background: #005fa3; }
+        h1 { text-align: center; }
+        .error { color: red; margin-top: 5px; }
+        .equivalents { margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<h1>Buscador de Equivalencias de Colores</h1>
+<div class="container">
+    <div class="panel">
+        <h2>Búsqueda por HEX</h2>
+        <label for="hexInput">Código HEX:</label>
+        <input type="text" id="hexInput" placeholder="#FFFFFF o FFFFFF">
+        <button onclick="buscarPorHEX()">EQUIVALENCIA</button>
+        <div id="hexError" class="error"></div>
+        <div id="hexColor" class="color-box"></div>
+        <div class="equivalents" id="hexResults"></div>
+    </div>
+    <div class="panel">
+        <h2>Búsqueda por Pantone</h2>
+        <label for="pantoneSelect">Selecciona Pantone:</label>
+        <select id="pantoneSelect"><option value="">Seleccione un Pantone</option></select>
+        <button onclick="buscarPorPantone()">EQUIVALENCIA</button>
+        <div id="pantoneError" class="error"></div>
+        <div id="pantoneColor" class="color-box"></div>
+        <div class="equivalents" id="pantoneResults"></div>
+    </div>
+</div>
+
+<script>
+let data;
+
+fetch('colores_equivalencias_v2.json')
+.then(response => response.json())
+.then(json => {
+    data = json;
+    const pantoneSelect = document.getElementById('pantoneSelect');
+    data.pantone.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.hex;
+        opt.textContent = p.name;
+        pantoneSelect.appendChild(opt);
+    });
+});
+
+function hexToRgb(hex) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c+c).join('');
+    const bigint = parseInt(hex, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return [r, g, b];
+}
+
+function colorDistance(c1, c2) {
+    return Math.sqrt(
+        Math.pow(c1[0] - c2[0], 2) +
+        Math.pow(c1[1] - c2[1], 2) +
+        Math.pow(c1[2] - c2[2], 2)
+    );
+}
+
+function buscarEquivalentes(rgb) {
+    const getClosest = (arr) => {
+        return arr.reduce((prev, curr) => {
+            const currRgb = hexToRgb(curr.hex);
+            return colorDistance(rgb, currRgb) < colorDistance(rgb, hexToRgb(prev.hex)) ? curr : prev;
+        });
+    };
+
+    return {
+        linea: getClosest(data.linea),
+        ambiance: getClosest(data.ambiance),
+        sensations: getClosest(data.sensations)
+    };
+}
+
+function renderResults(results, containerId) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    const items = [
+        {label: 'Línea', data: results.linea, extra: `(${results.linea.code} - ${results.linea.name} - ${results.linea.cartilla})`},
+        {label: 'Ambiance', data: results.ambiance, extra: `(${results.ambiance.code} - ${results.ambiance.name})`},
+        {label: 'Sensations', data: results.sensations, extra: `(${results.sensations.code})`}
+    ];
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'result';
+        const box = document.createElement('div');
+        box.className = 'color-box';
+        box.style.background = '#' + item.data.hex;
+        div.appendChild(box);
+        const text = document.createElement('span');
+        text.textContent = `${item.label}: ${item.extra}`;
+        div.appendChild(text);
+        container.appendChild(div);
+    });
+}
+
+function buscarPorHEX() {
+    const hex = document.getElementById('hexInput').value.trim().replace('#','');
+    const error = document.getElementById('hexError');
+    error.textContent = '';
+    if (!/^([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(hex)) {
+        error.textContent = '⚠️ Código HEX inválido. Ejemplo válido: #FFFFFF o FFFFFF';
+        return;
+    }
+    const rgb = hexToRgb(hex);
+    document.getElementById('hexColor').style.background = '#' + hex;
+    const resultados = buscarEquivalentes(rgb);
+    renderResults(resultados, 'hexResults');
+}
+
+function buscarPorPantone() {
+    const hex = document.getElementById('pantoneSelect').value;
+    const error = document.getElementById('pantoneError');
+    error.textContent = '';
+    if (!hex) {
+        error.textContent = '⚠️ Por favor selecciona un Pantone';
+        return;
+    }
+    const rgb = hexToRgb(hex);
+    document.getElementById('pantoneColor').style.background = '#' + hex;
+    const resultados = buscarEquivalentes(rgb);
+    renderResults(resultados, 'pantoneResults');
+}
+</script>
+
+</body>
+</html>
